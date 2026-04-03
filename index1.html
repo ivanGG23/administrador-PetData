@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PetData — Panel Administrador</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --green:       #2e7d32;
+    --green-light: #43a047;
+    --green-pale:  #e8f5e9;
+    --green-mid:   #c8e6c9;
+    --amber:       #f57f17;
+    --amber-pale:  #fff8e1;
+    --red:         #c62828;
+    --red-pale:    #ffebee;
+    --blue:        #1565c0;
+    --blue-pale:   #e3f2fd;
+    --bg:          #f4f6f4;
+    --surface:     #ffffff;
+    --border:      #e0e7e0;
+    --text:        #1a2e1a;
+    --text-2:      #4a6045;
+    --text-3:      #7a9a7a;
+    --sidebar-w:   240px;
+    --radius:      12px;
+    --shadow:      0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Login ── */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 50%, #388e3c 100%);
+  }
+  .login-card {
+    background: var(--surface); border-radius: 20px; padding: 48px 40px;
+    width: 380px; box-shadow: 0 24px 64px rgba(0,0,0,.2);
+  }
+  .login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+  .login-logo .paw { font-size: 32px; }
+  .login-logo h1 { font-size: 22px; font-weight: 600; color: var(--green); }
+  .login-logo span { font-size: 11px; color: var(--text-3); display: block; font-weight: 400; }
+  .login-field { margin-bottom: 16px; }
+  .login-field label { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); margin-bottom: 6px; }
+  .login-field input {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-family: inherit; font-size: 14px; outline: none;
+    transition: border-color .2s;
+  }
+  .login-field input:focus { border-color: var(--green-light); }
+  .login-btn {
+    width: 100%; padding: 12px; background: var(--green); color: #fff;
+    border: none; border-radius: 8px; font-family: inherit; font-size: 14px;
+    font-weight: 600; cursor: pointer; margin-top: 8px; transition: background .2s;
+  }
+  .login-btn:hover { background: var(--green-light); }
+  .login-error { color: var(--red); font-size: 12px; margin-top: 10px; text-align: center; display: none; }
+
+  /* ── App shell ── */
+  #app { display: none; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed; top: 0; left: 0; width: var(--sidebar-w); height: 100vh;
+    background: var(--green); display: flex; flex-direction: column;
+    z-index: 100; overflow-y: auto;
+  }
+  .sidebar-brand {
+    padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,.12);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sidebar-brand .paw { font-size: 24px; }
+  .sidebar-brand h2 { color: #fff; font-size: 16px; font-weight: 600; }
+  .sidebar-brand span { color: rgba(255,255,255,.6); font-size: 10px; display: block; }
+  .sidebar-nav { flex: 1; padding: 16px 12px; }
+  .nav-label { color: rgba(255,255,255,.4); font-size: 10px; font-weight: 600;
+    letter-spacing: .08em; padding: 12px 8px 6px; text-transform: uppercase; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-radius: 8px; color: rgba(255,255,255,.75); cursor: pointer;
+    transition: all .15s; font-size: 13.5px; font-weight: 500; margin-bottom: 2px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,.18); color: #fff; }
+  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+  .sidebar-footer {
+    padding: 16px 12px; border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .user-chip {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-radius: 8px; background: rgba(255,255,255,.1);
+  }
+  .user-chip .avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.25);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #fff;
+  }
+  .user-chip .info { flex: 1; overflow: hidden; }
+  .user-chip .info .name { color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-chip .info .role { color: rgba(255,255,255,.5); font-size: 10px; }
+  .logout-btn { background: none; border: none; color: rgba(255,255,255,.5); cursor: pointer; font-size: 16px; padding: 4px; transition: color .15s; }
+  .logout-btn:hover { color: #fff; }
+
+  /* ── Main ── */
+  .main { margin-left: var(--sidebar-w); padding: 28px; min-height: 100vh; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-header { margin-bottom: 24px; }
+  .page-header h2 { font-size: 22px; font-weight: 600; color: var(--text); }
+  .page-header p { color: var(--text-3); font-size: 13px; margin-top: 2px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px;
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .card-sub { font-size: 12px; color: var(--text-3); margin-bottom: 16px; }
+
+  /* ── Stat cards grid ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px; position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--accent, var(--green));
+  }
+  .stat-card .label { font-size: 11px; font-weight: 600; color: var(--text-3); letter-spacing: .06em; text-transform: uppercase; }
+  .stat-card .value { font-size: 32px; font-weight: 600; color: var(--text); margin: 6px 0 2px; font-family: 'DM Mono', monospace; }
+  .stat-card .desc { font-size: 11px; color: var(--text-3); }
+  .stat-card .icon-bg {
+    position: absolute; right: 16px; top: 16px; width: 40px; height: 40px;
+    border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; background: var(--icon-bg, var(--green-pale));
+  }
+
+  /* ── Charts row ── */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  /* ── Table ── */
+  .table-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .table-filters select, .table-filters input {
+    padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 13px; outline: none; background: var(--surface);
+    color: var(--text); transition: border-color .2s;
+  }
+  .table-filters select:focus, .table-filters input:focus { border-color: var(--green-light); }
+  .filter-btn {
+    padding: 8px 16px; background: var(--green); color: #fff; border: none;
+    border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer;
+    font-weight: 500; transition: background .2s;
+  }
+  .filter-btn:hover { background: var(--green-light); }
+  .reset-btn {
+    padding: 8px 14px; background: var(--surface); color: var(--text-2); border: 1.5px solid var(--border);
+    border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; transition: all .2s;
+  }
+  .reset-btn:hover { border-color: var(--green-light); color: var(--green); }
+
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th {
+    text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: .06em;
+    border-bottom: 1.5px solid var(--border); background: var(--bg);
+  }
+  .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--green-pale); }
+  .data-table .no-data td { text-align: center; color: var(--text-3); padding: 32px; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-green  { background: var(--green-pale);  color: var(--green); }
+  .badge-amber  { background: var(--amber-pale);  color: var(--amber); }
+  .badge-red    { background: var(--red-pale);    color: var(--red); }
+  .badge-blue   { background: var(--blue-pale);   color: var(--blue); }
+  .badge-gray   { background: #f0f0f0;            color: #666; }
+
+  /* ── Map ── */
+  #heatmap-container { height: 480px; border-radius: var(--radius); overflow: hidden; }
+
+  /* ── Users table ── */
+  .avatar-circle {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--green-mid);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; color: var(--green); flex-shrink: 0;
+  }
+  .user-info { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Loading/Error ── */
+  .loading-state { text-align: center; padding: 48px; color: var(--text-3); }
+  .loading-spinner {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--green); border-radius: 50%;
+    animation: spin .7s linear infinite; margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-state { text-align: center; padding: 32px; color: var(--red); }
+
+  /* ── Pagination ── */
+  .pagination { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .page-btn {
+    padding: 6px 12px; border: 1.5px solid var(--border); border-radius: 6px;
+    background: var(--surface); cursor: pointer; font-family: inherit; font-size: 12px;
+    color: var(--text-2); transition: all .15s;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+  .page-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+  .page-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .page-info { font-size: 12px; color: var(--text-3); }
+
+  /* ── Tooltip ── */
+  .tooltip { position: relative; display: inline-block; }
+  .tooltip .tip {
+    visibility: hidden; background: #1a2e1a; color: #fff; font-size: 11px;
+    padding: 4px 8px; border-radius: 4px; position: absolute; bottom: 130%;
+    left: 50%; transform: translateX(-50%); white-space: nowrap; z-index: 10;
+    opacity: 0; transition: opacity .15s;
+  }
+  .tooltip:hover .tip { visibility: visible; opacity: 1; }
+
+  /* ── Responsive ── */
+  @media (max-width: 1100px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    :root { --sidebar-w: 0px; }
+    .sidebar { display: none; }
+    .main { padding: 16px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ── Animations ── */
+  .fade-in { animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ── Report img ── */
+  .report-img { width: 48px; height: 36px; object-fit: cover; border-radius: 6px; background: var(--bg); }
+  .report-img-ph { width: 48px; height: 36px; border-radius: 6px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ LOGIN ════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="paw">🐾</span>
+      <div>
+        <h1>PetData</h1>
+        <span>Panel de Administración</span>
+      </div>
+    </div>
+    <div class="login-field">
+      <label>Correo electrónico</label>
+      <input type="email" id="login-email" placeholder="admin@email.com" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Iniciar sesión</button>
+    <div class="login-error" id="login-error">Correo o contraseña incorrectos</div>
+  </div>
+</div>
+
+<!-- ════════════════════ APP ════════════════════ -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="paw">🐾</span>
+      <div>
+        <h2>PetData</h2>
+        <span>Administrador</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Principal</div>
+      <div class="nav-item active" onclick="showPage('overview')" id="nav-overview">
+        <span class="icon">📊</span> Resumen general
+      </div>
+      <div class="nav-item" onclick="showPage('reports')" id="nav-reports">
+        <span class="icon">📋</span> Reportes
+      </div>
+      <div class="nav-label">Análisis</div>
+      <div class="nav-item" onclick="showPage('heatmap')" id="nav-heatmap">
+        <span class="icon">🗺️</span> Mapa de calor
+      </div>
+      <div class="nav-item" onclick="showPage('users')" id="nav-users">
+        <span class="icon">👥</span> Usuarios
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="avatar" id="sidebar-avatar">A</div>
+        <div class="info">
+          <div class="name" id="sidebar-name">Administrador</div>
+          <div class="role">Rol 3 — Admin</div>
+        </div>
+        <button class="logout-btn" onclick="doLogout()" title="Cerrar sesión">⏻</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="page active fade-in" id="page-overview">
+      <div class="page-header">
+        <h2>Resumen general</h2>
+        <p>Métricas globales de la plataforma PetData</p>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="loading-state" style="grid-column:1/-1">
+          <div class="loading-spinner"></div>
+          <p>Cargando estadísticas…</p>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-title">Distribución por especie</div>
+          <div class="card-sub">Proporción de animales reportados</div>
+          <div class="chart-wrap"><canvas id="chart-especies"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Tendencia de casos</div>
+          <div class="card-sub">Nuevos vs resueltos por período</div>
+          <div class="chart-wrap"><canvas id="chart-historial"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Top 10 zonas con más reportes</div>
+        <div class="card-sub">Reportes totales vs resueltos por ciudad / municipio</div>
+        <div id="zonas-chart" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <!-- ── REPORTES ── -->
+    <div class="page fade-in" id="page-reports">
+      <div class="page-header">
+        <h2>Gestión de reportes</h2>
+        <p>Filtra, revisa y monitorea todos los reportes activos</p>
+      </div>
+      <div class="card">
+        <div class="table-filters">
+          <select id="f-estado" onchange="fetchReports()">
+            <option value="">Todos los estados</option>
+            <option value="1">Pendiente</option>
+            <option value="2">En revisión</option>
+            <option value="3">En proceso</option>
+            <option value="4">Resuelto</option>
+            <option value="5">Falso</option>
+          </select>
+          <select id="f-prioridad" onchange="fetchReports()">
+            <option value="">Todas las prioridades</option>
+            <option value="1">Baja</option>
+            <option value="2">Media</option>
+            <option value="3">Alta</option>
+            <option value="4">Crítica</option>
+          </select>
+          <select id="f-tipo" onchange="fetchReports()">
+            <option value="">Todos los animales</option>
+            <option value="1">Perro</option>
+            <option value="2">Gato</option>
+            <option value="3">Otro</option>
+          </select>
+          <input type="date" id="f-inicio" onchange="fetchReports()" placeholder="Desde">
+          <input type="date" id="f-fin" onchange="fetchReports()" placeholder="Hasta">
+          <button class="reset-btn" onclick="resetFilters()">Limpiar</button>
+        </div>
+        <div id="reports-table-wrap">
+          <div class="loading-state"><div class="loading-spinner"></div><p>Cargando reportes…</p></div>
+        </div>
+        <div class="pagination" id="reports-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ── HEATMAP ── -->
+    <div class="page fade-in" id="page-heatmap">
+      <div class="page-header">
+        <h2>Mapa de calor</h2>
+        <p>Concentración geográfica de reportes activos</p>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div id="heatmap-container"></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--text-3);">Color por densidad de reportes cercanos (~1km):</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2196F3;"></span> Baja (0–1)
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#FFC107;"></span> Media (2–4)
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#FF9800;"></span> Alta (5–9)
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#E53935;"></span> Crítica (10+)
+        </span>
+      </div>
+    </div>
+
+    <!-- ── USERS ── -->
+    <div class="page fade-in" id="page-users">
+      <div class="page-header">
+        <h2>Gestión de usuarios</h2>
+        <p>Ciudadanos y rescatistas registrados en la plataforma</p>
+      </div>
+      <div class="card">
+        <div class="table-filters">
+          <input type="text" id="u-search" placeholder="Buscar por nombre o correo…" oninput="filterUsers()" style="width:240px;">
+          <select id="u-rol" onchange="filterUsers()">
+            <option value="">Todos los roles</option>
+            <option value="1">Ciudadano</option>
+            <option value="2">Rescatista</option>
+            <option value="3">Administrador</option>
+          </select>
+          <select id="u-estado" onchange="filterUsers()">
+            <option value="">Todos los estados</option>
+            <option value="activo">Activo</option>
+            <option value="suspendido">Suspendido</option>
+            <option value="baneado">Baneado</option>
+          </select>
+        </div>
+        <div id="users-table-wrap">
+          <div class="loading-state"><div class="loading-spinner"></div><p>Cargando usuarios…</p></div>
+        </div>
+        <div class="pagination" id="users-pagination"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════
+const API = 'https://api-gateway-production-db18.up.railway.app';
+let TOKEN = localStorage.getItem('pd_token') || '';
+let USER_DATA = JSON.parse(localStorage.getItem('pd_user') || 'null');
+
+// ── Datos en memoria ──
+let allReports = [];
+let allUsers   = [];
+let reportPage = 1;
+let userPage   = 1;
+const PER_PAGE = 15;
+let mapInstance = null;
+let heatCircles = [];
+let chartEspecies = null;
+let chartHistorial = null;
+
+// ════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!email || !pass) { errEl.textContent = 'Completa todos los campos'; errEl.style.display = 'block'; return; }
+
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: email, contrasena: pass })
+    });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+
+    if (data.user.rol_id !== 3) {
+      errEl.textContent = 'Acceso restringido a administradores'; errEl.style.display = 'block'; return;
+    }
+
+    TOKEN = data.token;
+    USER_DATA = data.user;
+    localStorage.setItem('pd_token', TOKEN);
+    localStorage.setItem('pd_user', JSON.stringify(USER_DATA));
+    startApp();
+  } catch {
+    errEl.textContent = 'Correo o contraseña incorrectos'; errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogout() {
+  TOKEN = ''; USER_DATA = null;
+  localStorage.removeItem('pd_token'); localStorage.removeItem('pd_user');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  if (USER_DATA) {
+    const name = `${USER_DATA.nombre} ${USER_DATA.apellido}`;
+    document.getElementById('sidebar-name').textContent = name;
+    document.getElementById('sidebar-avatar').textContent = (USER_DATA.nombre[0] || 'A').toUpperCase();
+  }
+
+  showPage('overview');
+  fetchOverview();
+  fetchReports();
+  fetchUsers();
+}
+
+// Auto-login si hay token guardado
+if (TOKEN && USER_DATA && USER_DATA.rol_id === 3) {
+  startApp();
+}
+
+// ════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+
+  if (name === 'heatmap') initHeatmap();
+}
+
+// ════════════════════════════════════════════════════════
+// OVERVIEW
+// ════════════════════════════════════════════════════════
+async function fetchOverview() {
+  try {
+    const res = await fetch(`${API}/reports/stats/global`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    const s = await res.json();
+    renderStats(s);
+    renderEspeciesChart(s.especies || []);
+    renderHistorialChart(s.historial || []);
+    renderZonas(s.zonas || []);
+  } catch {
+    document.getElementById('stats-grid').innerHTML =
+      '<div class="error-state" style="grid-column:1/-1">⚠️ Error al cargar estadísticas</div>';
+  }
+}
+
+function renderStats(s) {
+  const total = (s.especies || []).reduce((a, e) => a + e.total, 0);
+  const pendientes = s.pendientes ?? 0;
+  const activos    = s.activos ?? 0;
+  const rescatados = s.rescatados ?? 0;
+  const pct = (activos + rescatados) > 0 ? Math.round(rescatados * 100 / (activos + rescatados)) : 0;
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card" style="--accent:#1565c0;--icon-bg:#e3f2fd;">
+      <div class="label">Total reportes</div>
+      <div class="value">${total}</div>
+      <div class="desc">Desde el inicio</div>
+      <div class="icon-bg">📋</div>
+    </div>
+    <div class="stat-card" style="--accent:#f57f17;--icon-bg:#fff8e1;">
+      <div class="label">Pendientes</div>
+      <div class="value">${pendientes}</div>
+      <div class="desc">Sin atender</div>
+      <div class="icon-bg">⏳</div>
+    </div>
+    <div class="stat-card" style="--accent:#2e7d32;--icon-bg:#e8f5e9;">
+      <div class="label">En proceso</div>
+      <div class="value">${activos}</div>
+      <div class="desc">Atendidos por rescatistas</div>
+      <div class="icon-bg">🦺</div>
+    </div>
+    <div class="stat-card" style="--accent:#43a047;--icon-bg:#c8e6c9;">
+      <div class="label">Resueltos</div>
+      <div class="value">${rescatados}</div>
+      <div class="desc">${pct}% de tasa de resolución</div>
+      <div class="icon-bg">✅</div>
+    </div>`;
+}
+
+function renderEspeciesChart(especies) {
+  const ctx = document.getElementById('chart-especies').getContext('2d');
+  if (chartEspecies) chartEspecies.destroy();
+  chartEspecies = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: especies.map(e => e.nombre),
+      datasets: [{ data: especies.map(e => e.total),
+        backgroundColor: ['#2e7d32','#66bb6a','#a5d6a7'],
+        borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { family: 'DM Sans', size: 12 }, padding: 16 } } }
+    }
+  });
+}
+
+function renderHistorialChart(historial) {
+  const ctx = document.getElementById('chart-historial').getContext('2d');
+  if (chartHistorial) chartHistorial.destroy();
+  const labels = historial.map(h => h.periodo);
+  chartHistorial = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Nuevos', data: historial.map(h => h.nuevos),
+          backgroundColor: '#ffa726', borderRadius: 4 },
+        { label: 'Resueltos', data: historial.map(h => h.resueltos),
+          backgroundColor: '#43a047', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { family: 'DM Sans', size: 12 } } } },
+      scales: {
+        x: { ticks: { font: { family: 'DM Mono', size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { font: { family: 'DM Mono', size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderZonas(zonas) {
+  if (!zonas.length) {
+    document.getElementById('zonas-chart').innerHTML = '<p style="color:var(--text-3);text-align:center;padding:24px;">Sin datos de zonas</p>';
+    return;
+  }
+  const max = Math.max(...zonas.map(z => z.total), 1);
+  document.getElementById('zonas-chart').innerHTML = zonas.map(z => {
+    const tw = ((z.total / max) * 100).toFixed(1);
+    const rw = ((z.resueltos / max) * 100).toFixed(1);
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:12px;color:var(--text-2);font-weight:500;">${z.zona}</span>
+          <span style="font-size:11px;color:var(--text-3);">${z.resueltos}/${z.total}</span>
+        </div>
+        <div style="background:#f0f0f0;border-radius:6px;height:8px;margin-bottom:3px;overflow:hidden;">
+          <div style="width:${tw}%;height:100%;background:#ffa726;border-radius:6px;"></div>
+        </div>
+        <div style="background:#f0f0f0;border-radius:6px;height:8px;overflow:hidden;">
+          <div style="width:${rw}%;height:100%;background:#43a047;border-radius:6px;"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// REPORTES
+// ════════════════════════════════════════════════════════
+async function fetchReports() {
+  document.getElementById('reports-table-wrap').innerHTML =
+    '<div class="loading-state"><div class="loading-spinner"></div><p>Cargando reportes…</p></div>';
+
+  const estado    = document.getElementById('f-estado').value;
+  const prioridad = document.getElementById('f-prioridad').value;
+  const tipo      = document.getElementById('f-tipo').value;
+  const inicio    = document.getElementById('f-inicio').value;
+  const fin       = document.getElementById('f-fin').value;
+
+  const params = new URLSearchParams();
+  if (estado)    params.set('estado_id',    estado);
+  if (prioridad) params.set('prioridad_id', prioridad);
+  if (tipo)      params.set('tipo_animal_id', tipo);
+  if (inicio)    params.set('fecha_inicio', inicio);
+  if (fin)       params.set('fecha_fin',    fin);
+
+  try {
+    const res = await fetch(`${API}/reports?${params}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    allReports = await res.json();
+    reportPage = 1;
+    renderReportsTable();
+  } catch {
+    document.getElementById('reports-table-wrap').innerHTML =
+      '<div class="error-state">⚠️ Error al cargar reportes</div>';
+  }
+}
+
+function resetFilters() {
+  ['f-estado','f-prioridad','f-tipo'].forEach(id => document.getElementById(id).value = '');
+  ['f-inicio','f-fin'].forEach(id => document.getElementById(id).value = '');
+  fetchReports();
+}
+
+const ESTADO_LABEL = { 1:'Pendiente', 2:'En revisión', 3:'En proceso', 4:'Resuelto', 5:'Falso' };
+const ESTADO_CLASS = { 1:'badge-amber', 2:'badge-blue', 3:'badge-blue', 4:'badge-green', 5:'badge-red' };
+const PRIO_LABEL   = { 1:'Baja', 2:'Media', 3:'Alta', 4:'Crítica' };
+const PRIO_CLASS   = { 1:'badge-gray', 2:'badge-amber', 3:'badge-amber', 4:'badge-red' };
+const TIPO_ICON    = { 1:'🐶', 2:'🐱', 3:'🐾' };
+
+function renderReportsTable() {
+  const start = (reportPage - 1) * PER_PAGE;
+  const slice = allReports.slice(start, start + PER_PAGE);
+  const total = allReports.length;
+  const pages = Math.ceil(total / PER_PAGE);
+
+  if (!slice.length) {
+    document.getElementById('reports-table-wrap').innerHTML =
+      '<table class="data-table"><tbody><tr class="no-data"><td>No hay reportes con los filtros seleccionados</td></tr></tbody></table>';
+    document.getElementById('reports-pagination').innerHTML = '';
+    return;
+  }
+
+  const rows = slice.map(r => {
+    const fecha = new Date(r.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+    const tipoIcon = TIPO_ICON[r.tipo_animal_id] || '🐾';
+    const estadoLbl = ESTADO_LABEL[r.estado_reporte_actual] || r.estado_reporte_actual;
+    const estadoCls = ESTADO_CLASS[r.estado_reporte_actual] || 'badge-gray';
+    const prioCls   = PRIO_CLASS[r.prioridad_id] || 'badge-gray';
+    const prioLbl   = PRIO_LABEL[r.prioridad_id] || r.prioridad_id;
+    const creador   = r.creador ? `${r.creador.nombre}` : `#${r.usuario_creador_id}`;
+    const desc      = r.descripcion.length > 60 ? r.descripcion.slice(0,60)+'…' : r.descripcion;
+    const imgEl     = r.imagen_url
+      ? `<img src="${r.imagen_url}" class="report-img" loading="lazy">`
+      : `<div class="report-img-ph">${tipoIcon}</div>`;
+
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;color:var(--text-3);font-size:12px;">#${r.id ?? r.report_id}</td>
+      <td>${imgEl}</td>
+      <td><span style="font-size:16px;">${tipoIcon}</span> <span style="font-size:12px;color:var(--text-2);">${r.tipo_animal?.nombre || ''}</span></td>
+      <td style="max-width:220px;"><span style="font-size:13px;color:var(--text);">${desc}</span></td>
+      <td><span class="badge ${estadoCls}">${estadoLbl}</span></td>
+      <td><span class="badge ${prioCls}">${prioLbl}</span></td>
+      <td style="font-size:12px;color:var(--text-2);">${creador}</td>
+      <td style="font-size:12px;color:var(--text-3);">${fecha}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('reports-table-wrap').innerHTML = `
+    <div style="margin-bottom:8px;font-size:12px;color:var(--text-3);">${total} reportes encontrados</div>
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr>
+        <th>ID</th><th>Foto</th><th>Animal</th><th>Descripción</th>
+        <th>Estado</th><th>Prioridad</th><th>Creador</th><th>Fecha</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  renderPagination('reports-pagination', reportPage, pages, p => { reportPage = p; renderReportsTable(); });
+}
+
+// ════════════════════════════════════════════════════════
+// HEATMAP
+// ════════════════════════════════════════════════════════
+async function initHeatmap() {
+  if (!mapInstance) {
+    mapInstance = L.map('heatmap-container').setView([23.6345, -102.5528], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(mapInstance);
+  }
+
+  try {
+    const res = await fetch(`${API}/reports/heatmap`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    const puntos = await res.json();
+
+    heatCircles.forEach(c => mapInstance.removeLayer(c));
+    heatCircles = [];
+
+    if (!puntos.length) return;
+
+    // Calcular vecinos con umbral absoluto (igual que la app móvil)
+    const vecinos = puntos.map(p =>
+      puntos.filter(o => {
+        const dl = p.latitud - o.latitud, dg = p.longitud - o.longitud;
+        return Math.sqrt(dl*dl + dg*dg) < 0.01;
+      }).length - 1
+    );
+
+    puntos.forEach((p, i) => {
+      const v = vecinos[i];
+      const color = v >= 10 ? '#E53935' : v >= 5 ? '#FF9800' : v >= 2 ? '#FFC107' : '#2196F3';
+      const radius = v >= 10 ? 600 : v >= 5 ? 450 : v >= 2 ? 320 : 200;
+
+      const circle = L.circle([p.latitud, p.longitud], {
+        color, fillColor: color, fillOpacity: 0.35,
+        weight: 1, radius
+      }).bindPopup(`
+        <b>Reporte #${p.reporte_id}</b><br>
+        Prioridad: ${PRIO_LABEL[p.prioridad_id] || p.prioridad_id}<br>
+        Vecinos cercanos: ${v}
+      `);
+      circle.addTo(mapInstance);
+      heatCircles.push(circle);
+    });
+
+    // Centrar mapa en los datos
+    const lats = puntos.map(p => p.latitud);
+    const lngs = puntos.map(p => p.longitud);
+    mapInstance.fitBounds([[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]], { padding: [40, 40] });
+    setTimeout(() => mapInstance.invalidateSize(), 100);
+
+  } catch (e) {
+    console.error('Error heatmap:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// USUARIOS
+// ════════════════════════════════════════════════════════
+async function fetchUsers() {
+  try {
+    // Traer todos los reportes para calcular stats por usuario
+    const res = await fetch(`${API}/reports?`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    const reportes = await res.json();
+
+    // Agrupar estadísticas por usuario
+    const statsMap = {};
+    reportes.forEach(r => {
+      const uid = r.usuario_creador_id;
+      if (!statsMap[uid]) statsMap[uid] = { total: 0, falsos: 0, resueltos: 0, nombre: r.creador?.nombre || `Usuario #${uid}`, correo: r.creador?.correo || '' };
+      statsMap[uid].total++;
+      if (r.estado_reporte_actual === 5) statsMap[uid].falsos++;
+      if (r.estado_reporte_actual === 4) statsMap[uid].resueltos++;
+    });
+
+    allUsers = Object.entries(statsMap).map(([uid, s]) => ({
+      id: parseInt(uid), ...s
+    })).sort((a, b) => b.total - a.total);
+
+    userPage = 1;
+    renderUsersTable();
+  } catch {
+    document.getElementById('users-table-wrap').innerHTML =
+      '<div class="error-state">⚠️ Error al cargar usuarios</div>';
+  }
+}
+
+function filterUsers() {
+  userPage = 1;
+  renderUsersTable();
+}
+
+function renderUsersTable() {
+  const search = document.getElementById('u-search').value.toLowerCase();
+
+  let filtered = allUsers.filter(u => {
+    const matchSearch = !search ||
+      u.nombre.toLowerCase().includes(search) ||
+      u.correo.toLowerCase().includes(search);
+    return matchSearch;
+  });
+
+  const total = filtered.length;
+  const pages = Math.ceil(total / PER_PAGE);
+  const start = (userPage - 1) * PER_PAGE;
+  const slice = filtered.slice(start, start + PER_PAGE);
+
+  if (!slice.length) {
+    document.getElementById('users-table-wrap').innerHTML =
+      '<table class="data-table"><tbody><tr class="no-data"><td>No se encontraron usuarios</td></tr></tbody></table>';
+    document.getElementById('users-pagination').innerHTML = '';
+    return;
+  }
+
+  const rows = slice.map(u => {
+    const initials = u.nombre.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+    const falsosClass = u.falsos >= 3 ? 'color:var(--red);font-weight:600;' : 'color:var(--text-2);';
+    const pct = u.total > 0 ? Math.round(u.resueltos * 100 / u.total) : 0;
+
+    return `<tr>
+      <td>
+        <div class="user-info">
+          <div class="avatar-circle">${initials}</div>
+          <div>
+            <div style="font-weight:500;font-size:13px;">${u.nombre}</div>
+            <div style="font-size:11px;color:var(--text-3);">${u.correo || '—'}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-family:'DM Mono',monospace;text-align:center;">${u.total}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:center;${falsosClass}">${u.falsos}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:center;color:var(--green);">${u.resueltos}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:var(--green-light);border-radius:4px;"></div>
+          </div>
+          <span style="font-size:11px;color:var(--text-3);min-width:28px;">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('users-table-wrap').innerHTML = `
+    <div style="margin-bottom:8px;font-size:12px;color:var(--text-3);">${total} usuarios con actividad</div>
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr>
+        <th>Usuario</th>
+        <th style="text-align:center;">Reportes</th>
+        <th style="text-align:center;">Falsos</th>
+        <th style="text-align:center;">Resueltos</th>
+        <th>Tasa resolución</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  renderPagination('users-pagination', userPage, pages, p => { userPage = p; renderUsersTable(); });
+}
+
+// ════════════════════════════════════════════════════════
+// PAGINATION
+// ════════════════════════════════════════════════════════
+function renderPagination(containerId, current, total, onChange) {
+  if (total <= 1) { document.getElementById(containerId).innerHTML = ''; return; }
+
+  let html = `<span class="page-info">Página ${current} de ${total}</span>`;
+  html += `<button class="page-btn" ${current===1?'disabled':''} onclick="(${onChange})(${current-1})">‹ Anterior</button>`;
+
+  const range = [];
+  for (let i = Math.max(1, current-2); i <= Math.min(total, current+2); i++) range.push(i);
+  range.forEach(p => {
+    html += `<button class="page-btn ${p===current?'active':''}" onclick="(${onChange})(${p})">${p}</button>`;
+  });
+
+  html += `<button class="page-btn" ${current===total?'disabled':''} onclick="(${onChange})(${current+1})">Siguiente ›</button>`;
+  document.getElementById(containerId).innerHTML = html;
+}
+</script>
+</body>
+</html>
