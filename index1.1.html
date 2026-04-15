@@ -197,14 +197,6 @@
         <div class="card-sub">Reportes totales vs resueltos por ciudad / municipio</div>
         <div id="zonas-chart" style="margin-top:8px;"></div>
       </div>
-
-      <div class="card" style="margin-top:16px;">
-        <div class="card-title">Reportes por zona</div>
-        <div class="card-sub">Distribución de reportes totales por ciudad / municipio</div>
-        <div class="chart-wrap" style="height:320px;margin-top:8px;">
-          <canvas id="chart-zonas-bar"></canvas>
-        </div>
-      </div>
     </div>
 
     <!-- REPORTES -->
@@ -285,7 +277,7 @@ let allReports = [], allUsers = [], allUsersRaw = [];
 let reportPage = 1, userPage = 1;
 const PER_PAGE = 15;
 let leafletMap = null, heatCanvas = null, heatCtx = null, heatPoints = [];
-let chartEspecies = null, chartHistorial = null, chartZonasBar = null;
+let chartEspecies = null, chartHistorial = null;
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
 async function doLogin() {
@@ -353,7 +345,6 @@ async function fetchOverview() {
     renderEspeciesChart(s.especies || []);
     renderHistorialChart(s.historial || []);
     renderZonas(s.zonas || []);
-    renderZonasBar(s.zonas || []);
   } catch {
     document.getElementById('stats-grid').innerHTML = '<div class="error-state" style="grid-column:1/-1">⚠️ Error al cargar estadísticas</div>';
   }
@@ -407,74 +398,6 @@ function renderZonas(zonas) {
       <div style="background:#f0f0f0;border-radius:6px;height:8px;margin-bottom:3px;overflow:hidden;"><div style="width:${(z.total/max*100).toFixed(1)}%;height:100%;background:#ffa726;border-radius:6px;"></div></div>
       <div style="background:#f0f0f0;border-radius:6px;height:8px;overflow:hidden;"><div style="width:${(z.resueltos/max*100).toFixed(1)}%;height:100%;background:#43a047;border-radius:6px;"></div></div>
     </div>`).join('');
-}
-
-function renderZonasBar(zonas) {
-  const canvas = document.getElementById('chart-zonas-bar');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  if (chartZonasBar) chartZonasBar.destroy();
-
-  if (!zonas.length) {
-    canvas.parentElement.innerHTML = '<p style="color:var(--text-3);text-align:center;padding:24px;">Sin datos de zonas</p>';
-    return;
-  }
-
-  const sorted = [...zonas].sort((a, b) => b.total - a.total);
-
-  chartZonasBar = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: sorted.map(z => z.zona),
-      datasets: [
-        {
-          label: 'Total',
-          data: sorted.map(z => z.total),
-          backgroundColor: '#ffa726',
-          borderRadius: 5,
-          borderSkipped: false,
-        },
-        {
-          label: 'Resueltos',
-          data: sorted.map(z => z.resueltos),
-          backgroundColor: '#43a047',
-          borderRadius: 5,
-          borderSkipped: false,
-        }
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { font: { family: 'DM Sans', size: 12 }, padding: 16 }
-        },
-        tooltip: {
-          callbacks: {
-            afterLabel: (item) => {
-              const z = sorted[item.dataIndex];
-              const pct = z.total > 0 ? Math.round(z.resueltos * 100 / z.total) : 0;
-              return `Tasa resolución: ${pct}%`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          ticks: { font: { family: 'DM Mono', size: 11 }, stepSize: 1 },
-          grid: { color: '#f0f0f0' }
-        },
-        y: {
-          ticks: { font: { family: 'DM Sans', size: 12 } },
-          grid: { display: false }
-        }
-      }
-    }
-  });
 }
 
 // ── REPORTES ──────────────────────────────────────────────────────────────
