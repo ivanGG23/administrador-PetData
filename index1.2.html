@@ -423,54 +423,39 @@ function renderZonasBar(zonas) {
   const sorted = [...zonas].sort((a, b) => b.total - a.total);
 
   chartZonasBar = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: sorted.map(z => z.zona),
       datasets: [
         {
           label: 'Total',
           data: sorted.map(z => z.total),
-          borderColor: '#ffa726',
-          backgroundColor: 'rgba(255,167,38,0.12)',
-          pointBackgroundColor: '#ffa726',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.35,
+          backgroundColor: '#ffa726',
+          borderRadius: 5,
+          borderSkipped: false,
         },
         {
           label: 'Resueltos',
           data: sorted.map(z => z.resueltos),
-          borderColor: '#43a047',
-          backgroundColor: 'rgba(67,160,71,0.10)',
-          pointBackgroundColor: '#43a047',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.35,
+          backgroundColor: '#43a047',
+          borderRadius: 5,
+          borderSkipped: false,
         }
       ]
     },
     options: {
+      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { family: 'DM Sans', size: 12 }, padding: 16, usePointStyle: true }
+          labels: { font: { family: 'DM Sans', size: 12 }, padding: 16 }
         },
         tooltip: {
           callbacks: {
-            afterBody: (items) => {
-              const idx = items[0]?.dataIndex;
-              if (idx === undefined) return '';
-              const z = sorted[idx];
+            afterLabel: (item) => {
+              const z = sorted[item.dataIndex];
               const pct = z.total > 0 ? Math.round(z.resueltos * 100 / z.total) : 0;
               return `Tasa resolución: ${pct}%`;
             }
@@ -479,13 +464,13 @@ function renderZonasBar(zonas) {
       },
       scales: {
         x: {
-          ticks: { font: { family: 'DM Sans', size: 11 }, maxRotation: 35 },
-          grid: { color: '#f0f0f0' }
-        },
-        y: {
           beginAtZero: true,
           ticks: { font: { family: 'DM Mono', size: 11 }, stepSize: 1 },
           grid: { color: '#f0f0f0' }
+        },
+        y: {
+          ticks: { font: { family: 'DM Sans', size: 12 } },
+          grid: { display: false }
         }
       }
     }
