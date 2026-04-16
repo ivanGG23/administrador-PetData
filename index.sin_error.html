@@ -167,7 +167,6 @@
       <div class="nav-label">Análisis</div>
       <div class="nav-item" onclick="showPage('heatmap')" id="nav-heatmap"><span class="icon">🗺️</span> Mapa de calor</div>
       <div class="nav-item" onclick="showPage('users')" id="nav-users"><span class="icon">👥</span> Usuarios</div>
-      <div class="nav-item" onclick="showPage('solicitudes')" id="nav-solicitudes"><span class="icon">📩</span> Solicitudes <span id="solicitudes-badge" style="display:none;background:#c62828;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px;"></span></div>
     </nav>
     <div class="sidebar-footer">
       <div class="user-chip">
@@ -274,15 +273,6 @@
       </div>
     </div>
 
-    <!-- SOLICITUDES -->
-    <div class="page fade-in" id="page-solicitudes">
-      <div class="page-header"><h2>Solicitudes de rescatista</h2><p>Usuarios que solicitan cambio de rol a Rescatista (rol 2 → 3)</p></div>
-      <div class="card">
-        <div id="solicitudes-table-wrap"><div class="loading-state"><div class="loading-spinner"></div><p>Cargando solicitudes…</p></div></div>
-        <div class="pagination" id="solicitudes-pagination"></div>
-      </div>
-    </div>
-
   </main>
 </div>
 
@@ -292,8 +282,7 @@ let TOKEN     = localStorage.getItem('pd_token') || '';
 let USER_DATA = JSON.parse(localStorage.getItem('pd_user') || 'null');
 
 let allReports = [], allUsers = [], allUsersRaw = [];
-let reportPage = 1, userPage = 1, solicitudPage = 1;
-let allSolicitudes = [];
+let reportPage = 1, userPage = 1;
 const PER_PAGE = 15;
 let leafletMap = null, heatCanvas = null, heatCtx = null, heatPoints = [];
 let chartEspecies = null, chartHistorial = null, chartZonasBar = null;
@@ -342,7 +331,6 @@ function startApp() {
   fetchOverview();
   fetchReports();
   fetchUsers();
-  fetchSolicitudes();
 }
 
 if (TOKEN && USER_DATA && USER_DATA.rol_id === 3) startApp();
@@ -354,7 +342,6 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
   if (name === 'heatmap') initHeatmap();
-  if (name === 'solicitudes') fetchSolicitudes();
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────
@@ -666,8 +653,6 @@ function drawHeatGradients() {
 }
 
 // ── USUARIOS — usa GET /admin/usuarios ────────────────────────────────────
-let userReportCounts = {}; // user_id -> count
-
 async function fetchUsers() {
   try {
     const res = await fetch(`${API}/admin/usuarios`, {
@@ -675,20 +660,6 @@ async function fetchUsers() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     allUsersRaw = await res.json();
-
-    // Intentar obtener conteo de reportes por usuario
-    try {
-      const rRes = await fetch(`${API}/reports`, { headers: { Authorization: `Bearer ${TOKEN}` } });
-      if (rRes.ok) {
-        const reportes = await rRes.json();
-        userReportCounts = {};
-        (Array.isArray(reportes) ? reportes : []).forEach(r => {
-          const uid = r.usuario_creador_id;
-          if (uid) userReportCounts[uid] = (userReportCounts[uid] || 0) + 1;
-        });
-      }
-    } catch(e) { console.warn('No se pudo cargar conteo de reportes:', e); }
-
     userPage = 1;
     filterUsers();
   } catch (e) {
@@ -743,7 +714,6 @@ function renderUsersTable(filtered) {
     const estLbl   = u.estado_cuenta || '—';
     const estCls   = EST_CLASS[u.estado_cuenta] || 'badge-gray';
     const fecha    = u.fecha_creacion ? new Date(u.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '—';
-    const nReportes = userReportCounts[u.user_id] || 0;
 
     return `<tr>
       <td>
@@ -758,11 +728,6 @@ function renderUsersTable(filtered) {
       <td><span class="badge ${rolCls}">${rolLbl}</span></td>
       <td><span class="badge ${estCls}">${estLbl}</span></td>
       <td style="font-size:12px;color:var(--text-3);">${fecha}</td>
-      <td style="text-align:center;">
-        <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-family:'DM Mono',monospace;font-weight:600;color:${nReportes>0?'var(--green)':'var(--text-3)'};">
-          ${nReportes > 0 ? '📋' : ''} ${nReportes}
-        </span>
-      </td>
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-3);">#${u.user_id}</td>
     </tr>`;
   }).join('');
@@ -771,7 +736,7 @@ function renderUsersTable(filtered) {
     <div style="margin-bottom:8px;font-size:12px;color:var(--text-3);">${total} usuarios encontrados</div>
     <div style="overflow-x:auto;"><table class="data-table">
       <thead><tr>
-        <th>Usuario</th><th>Rol</th><th>Estado cuenta</th><th>Registro</th><th style="text-align:center;">Reportes</th><th>ID</th>
+        <th>Usuario</th><th>Rol</th><th>Estado cuenta</th><th>Registro</th><th>ID</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -780,183 +745,15 @@ function renderUsersTable(filtered) {
   renderPagination('users-pagination', userPage, pages, p => { userPage = p; renderUsersTable(currentFiltered); });
 }
 
-// ── SOLICITUDES DE RESCATISTA ─────────────────────────────────────────────
-async function fetchSolicitudes() {
-  try {
-    // Reusar los usuarios ya cargados o volver a pedirlos
-    let usuarios = allUsersRaw;
-    if (!usuarios.length) {
-      const res = await fetch(`${API}/admin/usuarios`, {
-        headers: { Authorization: `Bearer ${TOKEN}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      usuarios = await res.json();
-    }
-
-    // Filtrar los que tienen solicitud_rescatista === 'pendiente' y rol_id === 2
-    allSolicitudes = usuarios.filter(u =>
-      u.solicitud_rescatista === 'pendiente' && u.rol_id === 2
-    );
-
-    // Mostrar badge con conteo en el menú
-    const badge = document.getElementById('solicitudes-badge');
-    if (allSolicitudes.length > 0) {
-      badge.textContent = allSolicitudes.length;
-      badge.style.display = 'inline';
-    } else {
-      badge.style.display = 'none';
-    }
-
-    solicitudPage = 1;
-    renderSolicitudesTable();
-  } catch (e) {
-    console.error('Error solicitudes:', e);
-    const wrap = document.getElementById('solicitudes-table-wrap');
-    if (wrap) wrap.innerHTML = '<div class="error-state">⚠️ Error al cargar solicitudes</div>';
-  }
-}
-
-function renderSolicitudesTable() {
-  const wrap = document.getElementById('solicitudes-table-wrap');
-  if (!wrap) return;
-
-  const total = allSolicitudes.length;
-  const pages = Math.ceil(total / PER_PAGE);
-  const start = (solicitudPage - 1) * PER_PAGE;
-  const slice = allSolicitudes.slice(start, start + PER_PAGE);
-
-  if (!total) {
-    wrap.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-3);">
-      <div style="font-size:40px;margin-bottom:12px;">✅</div>
-      <div style="font-weight:600;margin-bottom:4px;">Sin solicitudes pendientes</div>
-      <div style="font-size:12px;">No hay usuarios esperando aprobación como rescatista</div>
-    </div>`;
-    document.getElementById('solicitudes-pagination').innerHTML = '';
-    return;
-  }
-
-  const rows = slice.map(u => {
-    const nombre   = `${u.nombre || ''} ${u.apellido || ''}`.trim() || `Usuario #${u.user_id}`;
-    const initials = nombre.split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
-    const correo   = u.correo || '—';
-    const fecha    = u.fecha_creacion ? new Date(u.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '—';
-    const nReportes = userReportCounts[u.user_id] || 0;
-
-    return `<tr id="sol-row-${u.user_id}">
-      <td>
-        <div class="user-info">
-          <div class="avatar-circle">${initials}</div>
-          <div>
-            <div style="font-weight:500;font-size:13px;">${nombre}</div>
-            <div style="font-size:11px;color:var(--text-3);">${correo}</div>
-          </div>
-        </div>
-      </td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-3);">#${u.user_id}</td>
-      <td><span class="badge badge-amber">Pendiente</span></td>
-      <td style="font-size:12px;color:var(--text-3);">${fecha}</td>
-      <td style="text-align:center;font-size:12px;font-family:'DM Mono',monospace;">${nReportes}</td>
-      <td>
-        <div style="display:flex;gap:8px;">
-          <button onclick="aprobarSolicitud(${u.user_id})" style="padding:6px 14px;background:var(--green);color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background='var(--green)'">✓ Aprobar</button>
-          <button onclick="rechazarSolicitud(${u.user_id})" style="padding:6px 14px;background:var(--surface);color:var(--red);border:1.5px solid var(--red);border-radius:6px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='var(--red-pale)'" onmouseout="this.style.background='var(--surface)'">✗ Rechazar</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  wrap.innerHTML = `
-    <div style="margin-bottom:8px;font-size:12px;color:var(--text-3);">${total} solicitud${total!==1?'es':''} pendiente${total!==1?'s':''}</div>
-    <div style="overflow-x:auto;"><table class="data-table">
-      <thead><tr>
-        <th>Usuario</th><th>ID</th><th>Solicitud</th><th>Registro</th><th style="text-align:center;">Reportes</th><th>Acción</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
-
-  renderPagination('solicitudes-pagination', solicitudPage, pages, p => { solicitudPage = p; renderSolicitudesTable(); });
-}
-
-async function aprobarSolicitud(userId) {
-  const btn = document.querySelector(`#sol-row-${userId} button`);
-  if (btn) { btn.disabled = true; btn.textContent = 'Procesando…'; }
-  try {
-    const res = await fetch(`${API}/admin/usuarios/${userId}/rol`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rol_id: 3, solicitud_rescatista: 'aprobado' })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Quitar de la lista local
-    allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, rol_id: 3, solicitud_rescatista: 'aprobado' } : u);
-    allSolicitudes = allSolicitudes.filter(u => u.user_id !== userId);
-    renderSolicitudesTable();
-    actualizarBadgeSolicitudes();
-    showToast(`✅ Usuario #${userId} promovido a Rescatista`);
-  } catch (e) {
-    showToast(`⚠️ Error al aprobar: ${e.message}`, true);
-    if (btn) { btn.disabled = false; btn.textContent = '✓ Aprobar'; }
-  }
-}
-
-async function rechazarSolicitud(userId) {
-  if (!confirm('¿Rechazar la solicitud de este usuario?')) return;
-  try {
-    const res = await fetch(`${API}/admin/usuarios/${userId}/rol`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ solicitud_rescatista: 'rechazado' })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, solicitud_rescatista: 'rechazado' } : u);
-    allSolicitudes = allSolicitudes.filter(u => u.user_id !== userId);
-    renderSolicitudesTable();
-    actualizarBadgeSolicitudes();
-    showToast(`🚫 Solicitud de usuario #${userId} rechazada`);
-  } catch (e) {
-    showToast(`⚠️ Error al rechazar: ${e.message}`, true);
-  }
-}
-
-function actualizarBadgeSolicitudes() {
-  const badge = document.getElementById('solicitudes-badge');
-  if (allSolicitudes.length > 0) {
-    badge.textContent = allSolicitudes.length;
-    badge.style.display = 'inline';
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function showToast(msg, isError = false) {
-  let t = document.getElementById('toast-msg');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast-msg';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:opacity .3s;';
-    document.body.appendChild(t);
-  }
-  t.textContent = msg;
-  t.style.background = isError ? '#c62828' : '#2e7d32';
-  t.style.color = '#fff';
-  t.style.opacity = '1';
-  clearTimeout(t._timeout);
-  t._timeout = setTimeout(() => { t.style.opacity = '0'; }, 3000);
-}
-
 // ── PAGINACIÓN ────────────────────────────────────────────────────────────
-let _paginationCallbacks = {};
-
 function renderPagination(containerId, current, total, onChange) {
   if (total <= 1) { document.getElementById(containerId).innerHTML = ''; return; }
-  _paginationCallbacks[containerId] = onChange;
-  const cb = `_paginationCallbacks['${containerId}']`;
   let html = `<span class="page-info">Página ${current} de ${total}</span>`;
-  html += `<button class="page-btn" ${current===1?'disabled':''} onclick="${cb}(${current-1})">‹ Anterior</button>`;
+  html += `<button class="page-btn" ${current===1?'disabled':''} onclick="(${onChange})(${current-1})">‹ Anterior</button>`;
   for (let i = Math.max(1,current-2); i <= Math.min(total,current+2); i++) {
-    html += `<button class="page-btn ${i===current?'active':''}" onclick="${cb}(${i})">${i}</button>`;
+    html += `<button class="page-btn ${i===current?'active':''}" onclick="(${onChange})(${i})">${i}</button>`;
   }
-  html += `<button class="page-btn" ${current===total?'disabled':''} onclick="${cb}(${current+1})">Siguiente ›</button>`;
+  html += `<button class="page-btn" ${current===total?'disabled':''} onclick="(${onChange})(${current+1})">Siguiente ›</button>`;
   document.getElementById(containerId).innerHTML = html;
 }
 </script>
