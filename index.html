@@ -1456,20 +1456,14 @@
     // ── SOLICITUDES DE RESCATISTA ─────────────────────────────────────────────
     async function fetchSolicitudes() {
       try {
-        // Reusar los usuarios ya cargados o volver a pedirlos
-        let usuarios = allUsersRaw;
-        if (!usuarios.length) {
-          const res = await fetch(`${API}/admin/usuarios`, {
-            headers: { Authorization: `Bearer ${TOKEN}` }
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          usuarios = await res.json();
-        }
+        const res = await fetch(`${API}/admin/solicitudes`, {
+          headers: { Authorization: `Bearer ${TOKEN}` }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-        // Filtrar los que tienen solicitud_rescatista === 'pendiente'
-        allSolicitudes = usuarios.filter(u =>
-          u.solicitud_rescatista === 'pendiente'
-        );
+        // El endpoint devuelve usuarios con solicitud pendiente directamente
+        allSolicitudes = Array.isArray(data) ? data.filter(u => u.solicitud_rescatista === 'pendiente') : [];
 
         // Mostrar badge con conteo en el menú
         const badge = document.getElementById('solicitudes-badge');
@@ -1554,18 +1548,16 @@
       const btn = document.querySelector(`#sol-row-${userId} button`);
       if (btn) { btn.disabled = true; btn.textContent = 'Procesando…'; }
       try {
-        const res = await fetch(`${API}/admin/usuarios/${userId}/rol`, {
+        const res = await fetch(`${API}/admin/solicitudes/${userId}/aprobar`, {
           method: 'PUT',
-          headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rol_id: 3, solicitud_rescatista: 'aprobado' })
+          headers: { Authorization: `Bearer ${TOKEN}` }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        // Quitar de la lista local
-        allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, rol_id: 3, solicitud_rescatista: 'aprobado' } : u);
+        allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, solicitud_rescatista: null } : u);
         allSolicitudes = allSolicitudes.filter(u => u.user_id !== userId);
         renderSolicitudesTable();
         actualizarBadgeSolicitudes();
-        showToast(`✅ Usuario #${userId} promovido a Rescatista`);
+        showToast(`✅ Usuario #${userId} aprobado como Rescatista`);
       } catch (e) {
         showToast(`⚠️ Error al aprobar: ${e.message}`, true);
         if (btn) { btn.disabled = false; btn.textContent = '✓ Aprobar'; }
@@ -1575,13 +1567,12 @@
     async function rechazarSolicitud(userId) {
       if (!confirm('¿Rechazar la solicitud de este usuario?')) return;
       try {
-        const res = await fetch(`${API}/admin/usuarios/${userId}/rol`, {
+        const res = await fetch(`${API}/admin/solicitudes/${userId}/rechazar`, {
           method: 'PUT',
-          headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ solicitud_rescatista: 'rechazado' })
+          headers: { Authorization: `Bearer ${TOKEN}` }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, solicitud_rescatista: 'rechazado' } : u);
+        allUsersRaw = allUsersRaw.map(u => u.user_id === userId ? { ...u, solicitud_rescatista: null } : u);
         allSolicitudes = allSolicitudes.filter(u => u.user_id !== userId);
         renderSolicitudesTable();
         actualizarBadgeSolicitudes();
